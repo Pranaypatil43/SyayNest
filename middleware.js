@@ -11,6 +11,17 @@ module.exports.isLoggedIn = (req, res, next) => {
     next();
 };
 
+// ── Auth: must be a host ───────────────────────────────────
+module.exports.isHost = (req, res, next) => {
+    if (!req.isAuthenticated()) {
+        return res.status(401).json({ error: 'You must be logged in first' });
+    }
+    if (req.user.role !== 'host') {
+        return res.status(403).json({ error: 'Only hosts can perform this action' });
+    }
+    next();
+};
+
 // ── Auth: must own the listing ─────────────────────────────
 module.exports.isOwner = async (req, res, next) => {
     const { id } = req.params;

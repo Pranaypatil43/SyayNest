@@ -2,21 +2,23 @@ const Joi = require('joi');
 
 module.exports.listingSchema = Joi.object({
     listing: Joi.object({
-        title: Joi.string().required(),
+        title:       Joi.string().required(),
         description: Joi.string().required(),
-        location: Joi.string().required(),
-        country: Joi.string().required(),
-        price: Joi.number().required().min(0),
-         category: Joi.string().required(),
-        image: Joi.string().allow("", null), // Image is optional
+        location:    Joi.string().required(),
+        country:     Joi.string().required(),
+        price:       Joi.number().required().min(0),
+        category:    Joi.string().required(),
+
+        // image fields — all optional (files handled by multer separately)
+        image:        Joi.any().optional(),
+        imageUrl:     Joi.string().allow('', null).optional(),
+        imageUrls:    Joi.array().items(Joi.string().allow('')).optional(),
+        replaceImages: Joi.boolean().optional(),
 
         geometry: Joi.object({
-    type: Joi.string().valid("Point").required(),
-    coordinates: Joi.array()
-        .items(Joi.number())
-        .length(2)
-        .required()
-}).required(),
+            type:        Joi.string().valid('Point').required(),
+            coordinates: Joi.array().items(Joi.number()).length(2).required(),
+        }).required(),
 
     }).required()
 });
@@ -24,6 +26,6 @@ module.exports.listingSchema = Joi.object({
 module.exports.reviewSchema = Joi.object({
     review: Joi.object({
         comment: Joi.string().required(),
-        rating: Joi.number().required().min(1).max(5)
+        rating:  Joi.number().required().min(1).max(5),
     }).required()
 });

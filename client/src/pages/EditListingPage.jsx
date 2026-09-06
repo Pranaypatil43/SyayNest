@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
-import { useAuth } from '../context/AuthContext';
 import Toast from '../components/Toast';
 
 const CATEGORIES = [
@@ -17,58 +16,68 @@ const CATEGORIES = [
 ];
 
 export default function EditListingPage() {
-  const { id }         = useParams();
-  const navigate       = useNavigate();
-  const { currentUser } = useAuth();
+  const { id }   = useParams();
+  const navigate = useNavigate();
 
-  const [toast, setToast]       = useState({ message: '', type: 'success' });
-  const [loading, setLoading]   = useState(false);
+  const [toast,     setToast]     = useState({ message: '', type: 'success' });
+  const [loading,   setLoading]   = useState(false);
   const [fetchDone, setFetchDone] = useState(false);
-  const [originalImage, setOriginalImage] = useState('');
-  const [imageFile, setImageFile]         = useState(null);
-  const [imagePreview, setImagePreview]   = useState(null);
+
+  // Existing images from DB
+  const [existingImgs, setExistingImgs] = useState([]); // [{ url, filename }]
+
+  // New files to add
+  const [newFiles,    setNewFiles]    = useState([]);
+  const [newPreviews, setNewPreviews] = useState([]);
+
+  // Replace vs append
+  const [replaceImages, setReplaceImages] = useState(false);
+
   const [form, setForm] = useState({
     title: '', description: '', category: '',
     price: '', country: '', location: '',
   });
 
   useEffect(() => {
-    if (!currentUser) { navigate('/login'); return; }
     api.get(`/listings/${id}`)
       .then(res => {
         const l = res.data;
         setForm({
-          title:       l.title || '',
+          title:       l.title       || '',
           description: l.description || '',
-          category:    l.category || '',
-          price:       l.price || '',
-          country:     l.country || '',
-          location:    l.location || '',
+          category:    l.category    || '',
+          price:       l.price       || '',
+          country:     l.country     || '',
+          location:    l.location    || '',
         });
-        if (l.image?.url) setOriginalImage(l.image.url.replace('/upload', '/upload/h_300,w_300'));
+        // Support both new images[] and legacy image
+        const imgs = l.images?.length
+          ? l.images
+          : l.image?.url ? [l.image] : [];
+        setExistingImgs(imgs);
         setFetchDone(true);
       })
       .catch(() => navigate('/listings'));
-  }, [id, currentUser, navigate]);
+  }, [id, navigate]);
 
   const handle = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
 
-  const handleImage = e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
+  const handleNewFiles = e => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    setNewFiles(files);
+    setNewPreviews(files.map(f => URL.createObjectURL(f)));
   };
 
   const submit = async e => {
     e.preventDefault();
     setLoading(true);
-    const listing = { ...form, price: Number(form.price) };
+    const listing = { ...form, price: Number(form.price), replaceImages };
     const fd = new FormData();
     fd.append('listing', JSON.stringify(listing));
-    if (imageFile) fd.append('image', imageFile);
+    newFiles.forEach(f => fd.append('images', f));
     try {
-      await api.put(`/listings/${id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      await api.put(`/listings/${id}`, fd);
       navigate(`/listings/${id}`);
     } catch (err) {
       setToast({ message: err.response?.data?.error || 'Failed to update', type: 'error' });
@@ -89,14 +98,12 @@ export default function EditListingPage() {
         <form onSubmit={submit}>
           <div className="wl-field">
             <label className="wl-label">Title</label>
-            <input name="title" type="text" className="wl-input"
-              value={form.title} onChange={handle} required />
+            <input name="title" type="text" className="wl-input" value={form.title} onChange={handle} required />
           </div>
 
           <div className="wl-field">
             <label className="wl-label">Description</label>
-            <textarea name="description" className="wl-textarea"
-              value={form.description} onChange={handle} required />
+            <textarea name="description" className="wl-textarea" value={form.description} onChange={handle} required />
           </div>
 
           <div className="wl-form-row">
@@ -109,36 +116,71 @@ export default function EditListingPage() {
             </div>
             <div className="wl-field">
               <label className="wl-label">Price per night (₹)</label>
-              <input name="price" type="number" min="0" className="wl-input"
-                value={form.price} onChange={handle} required />
+              <input name="price" type="number" min="0" className="wl-input" value={form.price} onChange={handle} required />
             </div>
           </div>
 
           <div className="wl-form-row">
             <div className="wl-field">
               <label className="wl-label">Location / City</label>
-              <input name="location" type="text" className="wl-input"
-                value={form.location} onChange={handle} required />
+              <input name="location" type="text" className="wl-input" value={form.location} onChange={handle} required />
             </div>
             <div className="wl-field">
               <label className="wl-label">Country</label>
-              <input name="country" type="text" className="wl-input"
-                value={form.country} onChange={handle} required />
+              <input name="country" type="text" className="wl-input" value={form.country} onChange={handle} required />
             </div>
           </div>
 
+          {/* ── Current photos ── */}
           <div className="wl-field">
-            <label className="wl-label">Cover photo</label>
-            {(imagePreview || originalImage) && (
-              <img
-                src={imagePreview || originalImage}
-                alt="listing preview"
-                className="wl-img-preview"
-              />
+            <label className="wl-label">Current photos</label>
+            {existingImgs.length > 0 ? (
+              <div className="wl-img-grid">
+                {existingImgs.map((img, i) => (
+                  <div key={i} className="wl-img-grid__item">
+                    <img src={img.url} alt={`photo ${i + 1}`} />
+                    {i === 0 && <span className="wl-img-grid__label">Cover</span>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ fontSize: '.83rem', color: 'var(--ink-soft)' }}>No photos yet</p>
             )}
-            <input type="file" className="wl-input" accept="image/*" onChange={handleImage} />
-            <p style={{ fontSize: '0.75rem', color: 'var(--ink-soft)', marginTop: 4 }}>
-              Leave blank to keep the current image
+          </div>
+
+          {/* ── New photos ── */}
+          <div className="wl-field">
+            <label className="wl-label">Add / replace photos</label>
+
+            {newPreviews.length > 0 && (
+              <div className="wl-img-grid" style={{ marginBottom: '0.75rem' }}>
+                {newPreviews.map((src, i) => (
+                  <div key={i} className="wl-img-grid__item">
+                    <img src={src} alt={`new ${i + 1}`} />
+                    {i === 0 && <span className="wl-img-grid__label">New cover</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <label className="wl-upload-btn">
+              <i className="fa-solid fa-cloud-arrow-up" />
+              {newPreviews.length ? 'Change selection' : 'Upload new photos'}
+              <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={handleNewFiles} />
+            </label>
+
+            {newFiles.length > 0 && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: '.85rem', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={replaceImages}
+                  onChange={e => setReplaceImages(e.target.checked)}
+                />
+                Replace all existing photos with new ones
+              </label>
+            )}
+            <p style={{ fontSize: '.75rem', color: 'var(--ink-soft)', marginTop: 4 }}>
+              Leave blank to keep current photos. First new photo becomes the cover.
             </p>
           </div>
 

@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
-import { useAuth } from '../context/AuthContext';
 import Toast from '../components/Toast';
 import LocationMap from '../components/LocationMap';
 
@@ -18,87 +17,93 @@ const CATEGORIES = [
 ];
 
 export default function NewListingPage() {
-  const { currentUser } = useAuth();
   const navigate = useNavigate();
-  const [toast, setToast] = useState({ message: '', type: 'success' });
+  const [toast,   setToast]   = useState({ message: '', type: 'success' });
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     title: '', description: '', category: '',
     price: '', country: '', location: '',
   });
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
-  const [imageUrl, setImageUrl] = useState('');
-  const [imageMode, setImageMode] = useState('upload'); // 'upload' or 'url'
-  /* default coords: centre of India */
-  const [coords, setCoords] = useState({ lat: 20.5937, lng: 78.9629 });
 
-  useEffect(() => {
-    if (!currentUser) navigate('/login');
-  }, [currentUser, navigate]);
+  // Multiple file uploads
+  const [imageFiles,    setImageFiles]    = useState([]);   // File objects
+  const [imagePreviews, setImagePreviews] = useState([]);   // blob URLs
+
+  // Multiple URL inputs
+  const [imageUrls, setImageUrls] = useState(['']);         // array of strings
+
+  const [imageMode, setImageMode] = useState('upload');     // 'upload' | 'url'
+  const [coords,    setCoords]    = useState({ lat: 20.5937, lng: 78.9629 });
 
   const handle = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
 
-  const handleImage = e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
+  // ── Image file handlers ──────────────────────────────────
+  const handleImages = e => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    setImageFiles(files);
+    setImagePreviews(files.map(f => URL.createObjectURL(f)));
   };
 
-  /**
-   * When the user finishes typing in the Location field and blurs,
-   * auto-geocode it to move the map to that place.
-   */
+  const removeFile = (idx) => {
+    setImageFiles(p  => p.filter((_, i) => i !== idx));
+    setImagePreviews(p => p.filter((_, i) => i !== idx));
+  };
+
+  // ── URL handlers ─────────────────────────────────────────
+  const handleUrlChange = (idx, val) => {
+    setImageUrls(p => p.map((u, i) => i === idx ? val : u));
+  };
+  const addUrlField   = () => setImageUrls(p => [...p, '']);
+  const removeUrl     = idx => setImageUrls(p => p.filter((_, i) => i !== idx));
+
+  // ── Location blur → geocode ──────────────────────────────
   const handleLocationBlur = async () => {
     const q = `${form.location}${form.country ? ', ' + form.country : ''}`.trim();
     if (!q) return;
     try {
-      const res = await fetch(
+      const res  = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`,
         { headers: { 'Accept-Language': 'en' } }
       );
       const data = await res.json();
-      if (data[0]) {
-        setCoords({ lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
-      }
-    } catch { /* silent fail */ }
+      if (data[0]) setCoords({ lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
+    } catch { /* silent */ }
   };
 
+  // ── Submit ───────────────────────────────────────────────
   const submit = async e => {
     e.preventDefault();
-    
-    // Validate: either file OR URL required
-    if (imageMode === 'upload' && !imageFile) {
-      setToast({ message: 'Please upload an image', type: 'error' });
-      return;
+
+    const validUrls = imageUrls.map(u => u.trim()).filter(Boolean);
+
+    if (imageMode === 'upload' && !imageFiles.length) {
+      return setToast({ message: 'Please upload at least one image', type: 'error' });
     }
-    if (imageMode === 'url' && !imageUrl.trim()) {
-      setToast({ message: 'Please enter an image URL', type: 'error' });
-      return;
+    if (imageMode === 'url' && !validUrls.length) {
+      return setToast({ message: 'Please enter at least one image URL', type: 'error' });
     }
 
     setLoading(true);
     const listing = {
       ...form,
-      price: Number(form.price),
+      price:    Number(form.price),
       geometry: { type: 'Point', coordinates: [coords.lng, coords.lat] },
     };
 
     try {
+      const fd = new FormData();
+
       if (imageMode === 'url') {
-        // Direct URL — send as JSON
-        listing.imageUrl = imageUrl.trim();
-        const res = await api.post('/listings', { listing });
-        navigate(`/listings/${res.data._id}`);
-      } else {
-        // File upload — send as FormData
-        const fd = new FormData();
+        listing.imageUrls = validUrls;
         fd.append('listing', JSON.stringify(listing));
-        fd.append('image', imageFile);
-        const res = await api.post('/listings', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-        navigate(`/listings/${res.data._id}`);
+      } else {
+        fd.append('listing', JSON.stringify(listing));
+        imageFiles.forEach(f => fd.append('images', f));
       }
+
+      const res = await api.post('/listings', fd);
+      navigate(`/listings/${res.data._id}`);
     } catch (err) {
       setToast({ message: err.response?.data?.error || 'Failed to create listing', type: 'error' });
     } finally {
@@ -114,16 +119,19 @@ export default function NewListingPage() {
         <p className="wl-form-subtitle">Fill in the details to publish your place</p>
 
         <form onSubmit={submit}>
+
           <div className="wl-field">
             <label className="wl-label">Title</label>
             <input name="title" type="text" className="wl-input"
-              placeholder="e.g. Cosy mountain cabin" value={form.title} onChange={handle} required />
+              placeholder="e.g. Cosy mountain cabin"
+              value={form.title} onChange={handle} required />
           </div>
 
           <div className="wl-field">
             <label className="wl-label">Description</label>
             <textarea name="description" className="wl-textarea"
-              placeholder="Describe your place…" value={form.description} onChange={handle} required />
+              placeholder="Describe your place…"
+              value={form.description} onChange={handle} required />
           </div>
 
           <div className="wl-form-row">
@@ -144,82 +152,99 @@ export default function NewListingPage() {
           <div className="wl-form-row">
             <div className="wl-field">
               <label className="wl-label">Location / City</label>
-              <input
-                name="location"
-                type="text"
-                className="wl-input"
+              <input name="location" type="text" className="wl-input"
                 placeholder="e.g. Manali"
-                value={form.location}
-                onChange={handle}
-                onBlur={handleLocationBlur}
-                required
-              />
+                value={form.location} onChange={handle} onBlur={handleLocationBlur} required />
             </div>
             <div className="wl-field">
               <label className="wl-label">Country</label>
-              <input
-                name="country"
-                type="text"
-                className="wl-input"
+              <input name="country" type="text" className="wl-input"
                 placeholder="e.g. India"
-                value={form.country}
-                onChange={handle}
-                onBlur={handleLocationBlur}
-                required
-              />
+                value={form.country} onChange={handle} onBlur={handleLocationBlur} required />
             </div>
           </div>
 
+          {/* ── Photos ── */}
           <div className="wl-field">
-            <label className="wl-label">Cover photo</label>
-            
-            {/* Toggle between upload / URL */}
+            <label className="wl-label">
+              Photos <span style={{ color: 'var(--ink-soft)', textTransform: 'none', fontWeight: 400 }}>(up to 10)</span>
+            </label>
+
+            {/* mode toggle */}
             <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '.875rem', cursor: 'pointer' }}>
-                <input
-                  type="radio"
-                  checked={imageMode === 'upload'}
-                  onChange={() => setImageMode('upload')}
-                />
-                Upload from computer
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '.875rem', cursor: 'pointer' }}>
-                <input
-                  type="radio"
-                  checked={imageMode === 'url'}
-                  onChange={() => setImageMode('url')}
-                />
-                Paste image URL
-              </label>
+              {['upload', 'url'].map(m => (
+                <label key={m} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '.875rem', cursor: 'pointer' }}>
+                  <input type="radio" checked={imageMode === m} onChange={() => setImageMode(m)} />
+                  {m === 'upload' ? 'Upload from computer' : 'Paste image URLs'}
+                </label>
+              ))}
             </div>
 
             {imageMode === 'upload' ? (
               <>
-                {imagePreview && (
-                  <img src={imagePreview} alt="preview" className="wl-img-preview" />
+                {/* previews grid */}
+                {imagePreviews.length > 0 && (
+                  <div className="wl-img-grid">
+                    {imagePreviews.map((src, i) => (
+                      <div key={i} className="wl-img-grid__item">
+                        <img src={src} alt={`preview ${i + 1}`} />
+                        <button type="button" className="wl-img-grid__remove" onClick={() => removeFile(i)} aria-label="Remove">
+                          <i className="fa-solid fa-xmark" />
+                        </button>
+                        {i === 0 && <span className="wl-img-grid__label">Cover</span>}
+                      </div>
+                    ))}
+                  </div>
                 )}
-                <input
-                  type="file"
-                  className="wl-input"
-                  accept="image/*"
-                  onChange={handleImage}
-                />
+                <label className="wl-upload-btn">
+                  <i className="fa-solid fa-cloud-arrow-up" />
+                  {imagePreviews.length ? 'Change photos' : 'Choose photos'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={handleImages}
+                  />
+                </label>
+                <p style={{ fontSize: '.75rem', color: 'var(--ink-soft)', marginTop: 4 }}>
+                  Select multiple at once. First photo = cover image.
+                </p>
               </>
             ) : (
               <>
-                {imageUrl && (
-                  <img src={imageUrl} alt="preview" className="wl-img-preview" onError={(e) => e.target.style.display = 'none'} />
+                {imageUrls.map((url, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                    <div style={{ flex: 1, position: 'relative' }}>
+                      <input
+                        type="url"
+                        className="wl-input"
+                        placeholder={`Image URL ${i + 1}`}
+                        value={url}
+                        onChange={e => handleUrlChange(i, e.target.value)}
+                      />
+                    </div>
+                    {url && (
+                      <img
+                        src={url}
+                        alt=""
+                        style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border)', flexShrink: 0 }}
+                        onError={e => { e.target.style.display = 'none'; }}
+                      />
+                    )}
+                    {imageUrls.length > 1 && (
+                      <button type="button" onClick={() => removeUrl(i)}
+                        style={{ background: 'none', border: 'none', color: 'var(--ink-soft)', cursor: 'pointer', fontSize: '1rem', padding: '4px', flexShrink: 0 }}>
+                        <i className="fa-solid fa-xmark" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {imageUrls.length < 10 && (
+                  <button type="button" className="wl-add-url-btn" onClick={addUrlField}>
+                    <i className="fa-solid fa-plus" /> Add another URL
+                  </button>
                 )}
-                <input
-                  type="url"
-                  className="wl-input"
-                  placeholder="https://images.unsplash.com/photo-..."
-                  value={imageUrl}
-                  onChange={e => setImageUrl(e.target.value)}
-                />
-                <p style={{ fontSize: '0.75rem', color: 'var(--ink-soft)', marginTop: 4 }}>
-                  Paste a direct image link (JPG, PNG, WebP)
-                </p>
               </>
             )}
           </div>
@@ -231,11 +256,7 @@ export default function NewListingPage() {
               mode="picker"
               coords={coords}
               onCoordsChange={setCoords}
-              defaultLocation={
-                form.location
-                  ? `${form.location}${form.country ? ', ' + form.country : ''}`
-                  : ''
-              }
+              defaultLocation={form.location ? `${form.location}${form.country ? ', ' + form.country : ''}` : ''}
             />
           </div>
 

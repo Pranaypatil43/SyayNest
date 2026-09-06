@@ -14,14 +14,21 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = async (username, password) => {
-    const res = await api.post('/users/login', { username, password });
-    setCurrentUser(res.data.user);
-    return res.data.user;
+  /** Host signup — creates account, does NOT log in automatically */
+  const signup = async (username, email) => {
+    const res = await api.post('/users/signup', { username, email });
+    return res.data; // { message }
   };
 
-  const signup = async (username, email, password) => {
-    const res = await api.post('/users/signup', { username, email, password });
+  /** Send OTP to email — works for both host and guest */
+  const sendOtp = async (email) => {
+    const res = await api.post('/users/send-otp', { email });
+    return res.data; // { message, dev_otp? }
+  };
+
+  /** Verify OTP — logs the user in */
+  const verifyOtp = async (email, code, fullName) => {
+    const res = await api.post('/users/verify-otp', { email, code, fullName });
     setCurrentUser(res.data.user);
     return res.data.user;
   };
@@ -31,8 +38,15 @@ export function AuthProvider({ children }) {
     setCurrentUser(null);
   };
 
+  const isHost  = currentUser?.role === 'host';
+  const isGuest = currentUser?.role === 'guest';
+
   return (
-    <AuthContext.Provider value={{ currentUser, loading, login, signup, logout }}>
+    <AuthContext.Provider value={{
+      currentUser, loading,
+      signup, sendOtp, verifyOtp, logout,
+      isHost, isGuest,
+    }}>
       {children}
     </AuthContext.Provider>
   );

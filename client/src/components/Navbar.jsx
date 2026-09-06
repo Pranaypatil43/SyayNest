@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function Navbar() {
-  const { currentUser, logout } = useAuth();
+  const { currentUser, isHost, logout } = useAuth();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [, setSearchParams] = useSearchParams();
@@ -60,19 +60,26 @@ export default function Navbar() {
 
         {/* Desktop links */}
         <div className="wl-nav__links">
-          <Link className="wl-nav__link" to="/listings/new">
-            <i className="fa-solid fa-plus" style={{ marginRight: 6 }} />
-            List your place
-          </Link>
+          {/* Only hosts can list a place */}
+          {isHost && (
+            <Link className="wl-nav__link" to="/listings/new">
+              <i className="fa-solid fa-plus" style={{ marginRight: 6 }} />
+              List your place
+            </Link>
+          )}
+
           {!currentUser ? (
             <>
-              <Link className="wl-nav__link" to="/signup">Sign up</Link>
+              <Link className="wl-nav__link" to="/signup">Become a host</Link>
               <Link className="wl-nav__link wl-nav__link--cta" to="/login">Log in</Link>
             </>
           ) : (
             <>
-              <span className="wl-nav__link" style={{ color: 'var(--ink-soft)', cursor: 'default' }}>
-                Hi, {currentUser.username}
+              <span className="wl-nav__link" style={{ cursor: 'default' }}>
+                {currentUser.role === 'host'
+                  ? <><i className="fa-solid fa-house" style={{ marginRight: 5, color: 'var(--brand)' }} />Hi, {currentUser.username}</>
+                  : <><i className="fa-solid fa-user" style={{ marginRight: 5 }} />Hi, {currentUser.fullName?.trim() || currentUser.username}</>
+                }
               </span>
               <button className="wl-nav__link" onClick={handleLogout}>Log out</button>
             </>
@@ -89,10 +96,12 @@ export default function Navbar() {
       <div className={`wl-nav__mobile ${menuOpen ? 'open' : ''}`}>
         <SearchForm />
         <Link className="wl-nav__link" to="/listings" onClick={() => setMenuOpen(false)}>Explore</Link>
-        <Link className="wl-nav__link" to="/listings/new" onClick={() => setMenuOpen(false)}>List your place</Link>
+        {isHost && (
+          <Link className="wl-nav__link" to="/listings/new" onClick={() => setMenuOpen(false)}>List your place</Link>
+        )}
         {!currentUser ? (
           <>
-            <Link className="wl-nav__link" to="/signup" onClick={() => setMenuOpen(false)}>Sign up</Link>
+            <Link className="wl-nav__link" to="/signup" onClick={() => setMenuOpen(false)}>Become a host</Link>
             <Link className="wl-nav__link wl-nav__link--cta" to="/login" onClick={() => setMenuOpen(false)}>Log in</Link>
           </>
         ) : (

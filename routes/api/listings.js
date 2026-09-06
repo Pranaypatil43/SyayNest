@@ -1,24 +1,70 @@
-const express = require('express');
-const router = express.Router();
-const multer = require('multer');
-const { storage } = require('../../cloudConfig.js');
-const upload = multer({ storage });
+const express    = require('express');
+const router     = express.Router();
+const multer     = require('multer');
+const { cloudinary } = require('../../cloudConfig.js');
 
-const Listing = require('../../models/listing.js');
-const Review  = require('../../models/reviews.js');
-const { isLoggedIn, isOwner, validateListing, isReviewAuthor, validateReview } = require('../../middleware.js');
+// Use memory storage — we'll upload to Cloudinary manually
+// This avoids multer-storage-cloudinary v2 incompatibility with multer v2
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB per file
+});
+
+const Listing   = require('../../models/listing.js');
+const Review    = require('../../models/reviews.js');
+const { isLoggedIn, isHost, isOwner, isReviewAuthor, validateReview } = require('../../middleware.js');
 const wrapAsync = require('../../utils/wrapAsync.js');
 
-/* multer-storage-cloudinary v2 puts the Cloudinary result directly
-   onto req.file. The URL field is `secure_url` (https), not `path`. */
-function imageFromFile(file) {
-    return {
-        url:      file.secure_url || file.path || '',
-        filename: file.public_id  || file.filename || '',
-    };
+/**
+ * Upload a single buffer to Cloudinary and return { url, filename }.
+ */
+function uploadBufferToCloudinary(buffer, mimetype) {
+    return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+            { folder: 'staynest_DEV', resource_type: 'image' },
+            (error, result) => {
+                if (error) return reject(error);
+                resolve({ url: result.secure_url, filename: result.public_id });
+            }
+        );
+        stream.end(buffer);
+    });
 }
 
-// GET all listings
+/**
+ * Collect all images from:
+ *  - req.files  (multer memoryStorage — array of file objects with .buffer)
+ *  - data.imageUrls (array of URL strings)
+ *  - data.imageUrl  (single URL string — legacy)
+ */
+async function resolveImages(req, data) {
+    const images = [];
+
+    // Upload files from memory to Cloudinary
+    if (req.files && req.files.length) {
+        for (const file of req.files) {
+            const result = await uploadBufferToCloudinary(file.buffer, file.mimetype);
+            images.push(result);
+        }
+    }
+
+    // Pasted URL array
+    if (Array.isArray(data.imageUrls)) {
+        data.imageUrls
+            .map(u => (u || '').trim())
+            .filter(Boolean)
+            .forEach(u => images.push({ url: u, filename: 'external' }));
+    }
+
+    // Legacy single URL
+    if (!images.length && data.imageUrl) {
+        images.push({ url: data.imageUrl.trim(), filename: 'external' });
+    }
+
+    return images;
+}
+
+// ── GET all listings ────────────────────────────────────────
 router.get('/', wrapAsync(async (req, res) => {
     const { category } = req.query;
     const allListings = category
@@ -27,61 +73,88 @@ router.get('/', wrapAsync(async (req, res) => {
     res.json(allListings);
 }));
 
-// GET single listing
+// ── GET single listing ──────────────────────────────────────
 router.get('/:id', wrapAsync(async (req, res) => {
     const listing = await Listing.findById(req.params.id)
-        .populate({ path: 'reviews', populate: { path: 'author' } })
-        .populate('owner');
+        .populate({ path: 'reviews', populate: { path: 'author', select: 'username fullName role' } })
+        .populate('owner', 'username fullName role');
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
     res.json(listing);
 }));
 
-// POST create listing
-router.post('/', isLoggedIn, upload.single('image'), wrapAsync(async (req, res) => {
+// ── POST create listing ─────────────────────────────────────
+router.post('/', isHost, upload.any(), wrapAsync(async (req, res) => {
     const data = JSON.parse(req.body.listing);
-    const newListing = new Listing(data);
-    
-    // Handle image: file upload OR direct URL
-    if (req.file) {
-        newListing.image = imageFromFile(req.file);
-    } else if (data.imageUrl) {
-        newListing.image = { url: data.imageUrl, filename: 'external' };
+
+    const imgs = await resolveImages(req, data);
+    if (!imgs.length) {
+        return res.status(400).json({ error: 'At least one image is required' });
     }
-    
-    newListing.owner = req.user._id;
+
+    const newListing = new Listing({
+        title:       data.title,
+        description: data.description,
+        price:       Number(data.price),
+        location:    data.location,
+        country:     data.country,
+        category:    data.category,
+        geometry:    data.geometry,
+        images:      imgs,
+        image:       imgs[0],   // backward compat
+        owner:       req.user._id,
+    });
+
     await newListing.save();
     res.status(201).json(newListing);
 }));
 
-// PUT update listing
-router.put('/:id', isLoggedIn, isOwner, upload.single('image'), wrapAsync(async (req, res) => {
-    const data = JSON.parse(req.body.listing);
-    const listing = await Listing.findByIdAndUpdate(req.params.id, data, { new: true });
-    if (req.file) {
-        listing.image = imageFromFile(req.file);
-        await listing.save();
+// ── PUT update listing ──────────────────────────────────────
+router.put('/:id', isHost, isOwner, upload.any(), wrapAsync(async (req, res) => {
+    const data    = JSON.parse(req.body.listing);
+    const listing = await Listing.findById(req.params.id);
+    if (!listing) return res.status(404).json({ error: 'Listing not found' });
+
+    // Update scalar fields
+    listing.title       = data.title       ?? listing.title;
+    listing.description = data.description ?? listing.description;
+    listing.price       = Number(data.price) || listing.price;
+    listing.location    = data.location    ?? listing.location;
+    listing.country     = data.country     ?? listing.country;
+    listing.category    = data.category    ?? listing.category;
+
+    // Update images if new ones provided
+    const imgs = await resolveImages(req, data);
+    if (imgs.length) {
+        listing.images = data.replaceImages
+            ? imgs
+            : [...(listing.images || []), ...imgs];
+        listing.image = listing.images[0];
     }
+
+    await listing.save();
     res.json(listing);
 }));
 
-// DELETE listing
-router.delete('/:id', isLoggedIn, isOwner, wrapAsync(async (req, res) => {
+// ── DELETE listing ──────────────────────────────────────────
+router.delete('/:id', isHost, isOwner, wrapAsync(async (req, res) => {
     await Listing.findByIdAndDelete(req.params.id);
     res.json({ message: 'Listing deleted' });
 }));
 
-// POST review
+// ── POST review ─────────────────────────────────────────────
 router.post('/:id/reviews', isLoggedIn, validateReview, wrapAsync(async (req, res) => {
-    const listing = await Listing.findById(req.params.id);
+    const listing   = await Listing.findById(req.params.id);
     const newReview = new Review(req.body.review);
     newReview.author = req.user._id;
     listing.reviews.push(newReview);
     await newReview.save();
     await listing.save();
-    res.status(201).json(newReview);
+    // Return review with author details populated
+    const populated = await newReview.populate('author', 'username fullName role');
+    res.status(201).json(populated);
 }));
 
-// DELETE review
+// ── DELETE review ───────────────────────────────────────────
 router.delete('/:id/reviews/:reviewId', isLoggedIn, isReviewAuthor, wrapAsync(async (req, res) => {
     const { id, reviewId } = req.params;
     await Listing.findByIdAndUpdate(id, { $pull: { reviews: reviewId } });

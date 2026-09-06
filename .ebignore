@@ -1,0 +1,13 @@
+# Don't upload these to Elastic Beanstalk
+node_modules/
+client/node_modules/
+client/src/
+client/public/
+client/index.html
+client/eslint.config.js
+client/vite.config.js
+client/package-lock.json
+.git/
+.env
+dev.js
+*.log

@@ -1,5 +1,0 @@
-# Handled by root .gitignore — this file is intentionally minimal
-# Vite env files (secrets must not be committed)
-.env
-.env.*
-!.env.example

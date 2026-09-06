@@ -15,6 +15,7 @@ const MongoStore = require('connect-mongo').default;
 const flash    = require('connect-flash');
 const passport = require('passport');
 const LocalStrategy = require('passport-local');
+const path     = require('path');
 
 const User = require('./models/user.js');
 const ExpressError = require('./utils/ExpressError.js');
@@ -22,8 +23,11 @@ const ExpressError = require('./utils/ExpressError.js');
 // API routes
 const apiListingsRouter = require('./routes/api/listings.js');
 const apiUsersRouter    = require('./routes/api/users.js');
+const apiBookingsRouter = require('./routes/api/bookings.js');
 
-const dburl = process.env.ATLASDB_URL;
+const dburl      = process.env.ATLASDB_URL;
+const isProd     = process.env.NODE_ENV === 'production';
+const CLIENT_URL = process.env.CLIENT_URL || '';   // e.g. https://staynest.example.com
 
 // ── DB connection ──────────────────────────────────────────
 mongoose.connect(dburl)
@@ -33,10 +37,14 @@ mongoose.connect(dburl)
 // ── App setup ─────────────────────────────────────────────
 const app = express();
 
+// Trust AWS ALB / Nginx reverse proxy (needed for secure cookies over HTTPS)
+if (isProd) app.set('trust proxy', 1);
+
+// ── CORS ───────────────────────────────────────────────────
 const DEV_ORIGINS = ['http://localhost:5173', 'http://localhost:5174'];
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? false
+  origin: isProd
+    ? (CLIENT_URL ? [CLIENT_URL] : false)   // set CLIENT_URL env on AWS
     : (origin, cb) => {
         if (!origin || DEV_ORIGINS.includes(origin)) return cb(null, true);
         cb(new Error(`CORS blocked: ${origin}`));
@@ -62,8 +70,9 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
-    maxAge:  7 * 24 * 60 * 60 * 1000,
+    secure:   isProd,                     // HTTPS only in production
+    sameSite: isProd ? 'none' : 'lax',   // cross-origin cookies on AWS
+    maxAge:   7 * 24 * 60 * 60 * 1000,
   },
 }));
 
@@ -79,9 +88,20 @@ passport.deserializeUser(User.deserializeUser());
 // ── API routes ─────────────────────────────────────────────
 app.use('/api/listings', apiListingsRouter);
 app.use('/api/users',    apiUsersRouter);
+app.use('/api/bookings', apiBookingsRouter);
 
-// ── 404 ────────────────────────────────────────────────────
-app.use((req, res) => {
+// ── Serve React build in production ───────────────────────
+if (isProd) {
+  const distPath = path.join(__dirname, 'client', 'dist');
+  app.use(express.static(distPath));
+  // All non-API routes → React app (client-side routing)
+  app.get(/^(?!\/api).*/, (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
+// ── 404 (API only) ─────────────────────────────────────────
+app.use('/api', (req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
@@ -93,4 +113,4 @@ app.use((err, req, res, next) => {
 
 // ── Start ──────────────────────────────────────────────────
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT} [${isProd ? 'production' : 'development'}]`));

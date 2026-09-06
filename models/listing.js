@@ -9,10 +9,19 @@ const listingSchema = new Schema({
     },
     description: String,
 
+    // Legacy single image (kept for old data compatibility)
     image: {
         url: String,
         filename: String,
     },
+
+    // Multiple images array (new)
+    images: [
+        {
+            url:      String,
+            filename: String,
+        }
+    ],
 
     price: Number,
     location: String,
