@@ -9,6 +9,10 @@ const userSchema = new Schema({
     phone: {
         type: String,
     },
+    googleId: {
+        type: String,
+        sparse: true,   // allows multiple null values (unique index only on non-null)
+    },
     // 'host' = can create/edit/delete listings
     // 'guest' = normal user, can only book & review
     role: {
@@ -17,6 +21,7 @@ const userSchema = new Schema({
         default: 'guest',
     },
     fullName: String,
+    avatar: String,     // Google profile picture URL
 });
 
 userSchema.plugin(passportLocalMongoose);

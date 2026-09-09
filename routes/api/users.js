@@ -143,4 +143,26 @@ router.post('/logout', (req, res, next) => {
     });
 });
 
+// ─────────────────────────────────────────────────────────
+//  GET /api/users/auth/google  — initiate Google OAuth
+// ─────────────────────────────────────────────────────────
+router.get('/auth/google',
+    passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+// ─────────────────────────────────────────────────────────
+//  GET /api/users/auth/google/callback  — Google redirects here
+// ─────────────────────────────────────────────────────────
+router.get('/auth/google/callback',
+    passport.authenticate('google', { failureRedirect: '/login?error=google' }),
+    (req, res) => {
+        // Success — redirect to frontend listings page
+        const isProd    = process.env.NODE_ENV === 'production';
+        const frontendUrl = isProd
+            ? (process.env.CLIENT_URL || '')
+            : 'http://localhost:5173';
+        res.redirect(`${frontendUrl}/listings`);
+    }
+);
+
 module.exports = router;

@@ -14,7 +14,8 @@ const session  = require('express-session');
 const MongoStore = require('connect-mongo').default;
 const flash    = require('connect-flash');
 const passport = require('passport');
-const LocalStrategy = require('passport-local');
+const LocalStrategy  = require('passport-local');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const path     = require('path');
 
 const User = require('./models/user.js');
@@ -82,6 +83,46 @@ app.use(flash());
 app.use(passport.initialize());
 app.use(passport.session());
 passport.use(new LocalStrategy(User.authenticate()));
+
+// ── Google OAuth strategy ──────────────────────────────────
+const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:8080`;
+
+passport.use(new GoogleStrategy({
+  clientID:     process.env.GOOGLE_CLIENT_ID,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  callbackURL:  `${BACKEND_URL}/api/users/auth/google/callback`,
+  scope: ['profile', 'email'],
+}, async (accessToken, refreshToken, profile, done) => {
+  try {
+    const email    = profile.emails?.[0]?.value?.toLowerCase();
+    const fullName = profile.displayName || '';
+    const avatar   = profile.photos?.[0]?.value || '';
+    const googleId = profile.id;
+
+    // Check if user already exists (by googleId or email)
+    let user = await User.findOne({ googleId });
+    if (!user && email) user = await User.findOne({ email });
+
+    if (user) {
+      // Update Google info if missing
+      if (!user.googleId) { user.googleId = googleId; }
+      if (!user.avatar)   { user.avatar   = avatar; }
+      if (!user.fullName) { user.fullName  = fullName; }
+      await user.save();
+      return done(null, user);
+    }
+
+    // Create new guest account via Google
+    const username = 'g_' + (email?.split('@')[0] || googleId).replace(/[^a-z0-9]/gi, '').slice(0, 20) + '_' + Date.now().toString(36);
+    const tempPw   = require('crypto').randomBytes(32).toString('hex');
+    const newUser  = new User({ username, email, fullName, googleId, avatar, role: 'guest' });
+    const saved    = await User.register(newUser, tempPw);
+    return done(null, saved);
+  } catch (err) {
+    return done(err, null);
+  }
+}));
+
 passport.serializeUser(User.serializeUser());
 passport.deserializeUser(User.deserializeUser());
 

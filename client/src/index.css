@@ -2048,3 +2048,49 @@ a     { color: inherit; text-decoration: none; }
   .wl-rv-summary { gap: 1.5rem; }
   .wl-rv-grid    { grid-template-columns: 1fr; }
 }
+
+/* ─────────────────────────────────────────
+   GOOGLE SIGN-IN BUTTON
+───────────────────────────────────────── */
+.wl-google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--t), border-color var(--t), box-shadow var(--t);
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+.wl-google-btn:hover {
+  background: var(--surface);
+  border-color: #aaa;
+  box-shadow: 0 2px 8px rgba(0,0,0,.1);
+  color: var(--ink);
+}
+
+/* OR divider */
+.wl-auth-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 1rem 0;
+  color: var(--ink-soft);
+  font-size: .8rem;
+}
+.wl-auth-or::before,
+.wl-auth-or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
