@@ -71,9 +71,9 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    secure:   isProd,                     // HTTPS only in production
-    sameSite: isProd ? 'none' : 'lax',   // cross-origin cookies on AWS
-    maxAge:   7 * 24 * 60 * 60 * 1000,
+    secure:   isProd,
+    sameSite: isProd ? 'none' : 'lax',
+    maxAge:   2 * 24 * 60 * 60 * 1000,   // 2 days
   },
 }));
 

@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { useAuth } from '../context/AuthContext';
 
 /* ── shared OTP step ─────────────────────────────────────── */
@@ -97,6 +98,22 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
 
+  // First-time visitor → send to signup instead
+  useEffect(() => {
+    const isReturning = localStorage.getItem('sn_visited');
+    const fromSignup  = params.get('from') === 'signup';  // don't redirect loop
+    const forceLogin  = params.get('force') === '1';      // explicit login link
+
+    if (!isReturning && !fromSignup && !forceLogin) {
+      // Mark as visited so next time they come here normally
+      localStorage.setItem('sn_visited', '1');
+      navigate(`/signup?role=${defaultRole}`, { replace: true });
+      return;
+    }
+    // Mark visited on every login page load
+    localStorage.setItem('sn_visited', '1');
+  }, []);
+
   const handleSend = async (e) => {
     e.preventDefault();
     if (!email.trim()) return setError('Enter your email address');
@@ -184,7 +201,7 @@ export default function LoginPage() {
 
             <p className="wl-auth-footer-note">
               {role === 'guest'
-                ? <>New here? Just enter your email — we'll create your account automatically.</>
+                ? <>New here? <Link to="/signup?role=guest" className="wl-auth-link">Create a free account →</Link></>
                 : <>New host? <Link to="/signup?role=host" className="wl-auth-link">Create a host account →</Link></>
               }
             </p>
@@ -201,11 +218,10 @@ export default function LoginPage() {
           />
         )}
 
-        {/* Switch role note */}
         <div className="wl-auth-switch">
           {role === 'guest'
-            ? <>Want to list your property? <Link to="/signup?role=host" className="wl-auth-link">Become a host</Link></>
-            : <>Looking to book a stay? <button type="button" className="wl-auth-link" onClick={() => { setRole('guest'); setStep(1); setEmail(''); }}>Log in as customer</button></>
+            ? <>Don't have an account? <Link to="/signup?role=guest" className="wl-auth-link">Sign up free →</Link></>
+            : <>Looking to book a stay? <button type="button" className="wl-auth-link" onClick={() => { setRole('guest'); setStep(1); setEmail(''); setError(''); }}>Log in as customer</button></>
           }
         </div>
 

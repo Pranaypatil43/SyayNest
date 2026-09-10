@@ -75,7 +75,7 @@ export default function SignupPage() {
   const [role, setRole] = useState(defaultRole);
 
   // Customer state
-  const [guestForm, setGuestForm] = useState({ fullName: '', email: '' });
+  const [guestForm, setGuestForm] = useState({ displayName: '', email: '' });
   const [guestStep, setGuestStep] = useState(1); // 1=form, 2=otp
 
   // Host state
@@ -88,7 +88,8 @@ export default function SignupPage() {
   /* ── Customer signup: send OTP ── */
   const handleGuestSubmit = async (e) => {
     e.preventDefault();
-    if (!guestForm.fullName.trim()) return setError('Enter your full name');
+    if (!guestForm.displayName.trim()) return setError('Enter your display name');
+    if (guestForm.displayName.trim().length < 2) return setError('Name must be at least 2 characters');
     if (!guestForm.email.trim())    return setError('Enter your email address');
     setLoading(true); setError('');
     try {
@@ -122,7 +123,7 @@ export default function SignupPage() {
         <p className="wl-auth-sub" style={{ marginBottom: '1.75rem' }}>
           Welcome aboard! Log in with your email OTP to start listing your properties on StayNest.
         </p>
-        <button className="wl-btn-primary" onClick={() => navigate('/login?role=host')}>
+        <button className="wl-btn-primary" onClick={() => navigate('/login?role=host&force=1')}>
           <i className="fa-solid fa-right-to-bracket" style={{ marginRight: 8 }} />
           Log in as Host
         </button>
@@ -168,15 +169,18 @@ export default function SignupPage() {
             </div>
 
             <div className="wl-field">
-              <label className="wl-label">Full name</label>
+              <label className="wl-label">Display name</label>
               <div className="wl-input-icon-wrap">
                 <i className="fa-solid fa-user wl-input-icon" />
                 <input type="text" className="wl-input wl-input--icon"
-                  placeholder="e.g. Rahul Sharma"
-                  value={guestForm.fullName}
-                  onChange={e => { setGuestForm(p => ({...p, fullName: e.target.value})); setError(''); }}
+                  placeholder="e.g. Rahul or Rahul Sharma"
+                  value={guestForm.displayName}
+                  onChange={e => { setGuestForm(p => ({...p, displayName: e.target.value})); setError(''); }}
                   required autoFocus />
               </div>
+              <p style={{ fontSize:'.75rem', color:'var(--ink-soft)', marginTop:4 }}>
+                This is how your name appears on StayNest
+              </p>
             </div>
 
             <div className="wl-field">
@@ -220,7 +224,7 @@ export default function SignupPage() {
         {role === 'guest' && guestStep === 2 && (
           <OtpStep
             email={guestForm.email}
-            fullName={guestForm.fullName}
+            fullName={guestForm.displayName}
             onBack={() => { setGuestStep(1); setError(''); }}
             onSuccess={() => navigate('/listings')}
           />
@@ -278,7 +282,7 @@ export default function SignupPage() {
         {/* Bottom switch */}
         <div className="wl-auth-switch">
           Already have an account?&nbsp;
-          <Link to={`/login?role=${role}`} className="wl-auth-link">Log in →</Link>
+          <Link to={`/login?role=${role}&force=1`} className="wl-auth-link">Log in →</Link>
         </div>
 
       </div>

@@ -2,6 +2,21 @@ import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
+/** Show fullName if set, otherwise strip the ugly auto-generated guest_ prefix */
+function displayName(user) {
+  if (!user) return '';
+  // 1. Real name set
+  if (user.fullName?.trim()) return user.fullName.trim();
+  // 2. Has email → use the part before @  e.g. arpit@gmail.com → Arpit
+  if (user.email) {
+    const name = user.email.split('@')[0].replace(/[._-]/g, ' ').trim();
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  }
+  // 3. Has username → strip guest_ prefix and random suffix
+  const u = user.username || '';
+  return u.replace(/^guest_/, '').replace(/_[a-z0-9]{4,}$/i, '').replace(/_/g, ' ').trim() || 'User';
+}
+
 export default function Navbar() {
   const { currentUser, isHost, logout } = useAuth();
   const navigate = useNavigate();
@@ -70,15 +85,16 @@ export default function Navbar() {
 
           {!currentUser ? (
             <>
-              <Link className="wl-nav__link" to="/signup">Become a host</Link>
-              <Link className="wl-nav__link wl-nav__link--cta" to="/login">Log in</Link>
+              <Link className="wl-nav__link" to="/signup?role=guest">Sign up</Link>
+              <Link className="wl-nav__link" to="/signup?role=host" style={{ color: 'var(--ink-soft)' }}>Become a host</Link>
+              <Link className="wl-nav__link wl-nav__link--cta" to="/login?force=1">Log in</Link>
             </>
           ) : (
             <>
               <span className="wl-nav__link" style={{ cursor: 'default' }}>
                 {currentUser.role === 'host'
-                  ? <><i className="fa-solid fa-house" style={{ marginRight: 5, color: 'var(--brand)' }} />Hi, {currentUser.username}</>
-                  : <><i className="fa-solid fa-user" style={{ marginRight: 5 }} />Hi, {currentUser.fullName?.trim() || currentUser.username}</>
+                  ? <><i className="fa-solid fa-house" style={{ marginRight: 5, color: 'var(--brand)' }} />Hi, {displayName(currentUser)}</>
+                  : <><i className="fa-solid fa-user" style={{ marginRight: 5 }} />Hi, {displayName(currentUser)}</>
                 }
               </span>
               <button className="wl-nav__link" onClick={handleLogout}>Log out</button>
@@ -101,8 +117,9 @@ export default function Navbar() {
         )}
         {!currentUser ? (
           <>
-            <Link className="wl-nav__link" to="/signup" onClick={() => setMenuOpen(false)}>Become a host</Link>
-            <Link className="wl-nav__link wl-nav__link--cta" to="/login" onClick={() => setMenuOpen(false)}>Log in</Link>
+            <Link className="wl-nav__link" to="/signup?role=guest" onClick={() => setMenuOpen(false)}>Sign up</Link>
+            <Link className="wl-nav__link" to="/signup?role=host" onClick={() => setMenuOpen(false)}>Become a host</Link>
+            <Link className="wl-nav__link wl-nav__link--cta" to="/login?force=1" onClick={() => setMenuOpen(false)}>Log in</Link>
           </>
         ) : (
           <button className="wl-nav__link" onClick={handleLogout}>Log out</button>

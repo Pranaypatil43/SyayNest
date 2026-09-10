@@ -108,13 +108,15 @@ router.post('/verify-otp', wrapAsync(async (req, res, next) => {
     let user = await User.findOne({ email: emailLower });
 
     if (!user) {
-        // New guest — auto-create account
-        const username = 'guest_' + emailLower.split('@')[0].replace(/[^a-z0-9]/gi, '') + '_' + Date.now().toString(36);
+        // New guest — create account using their chosen display name
+        const safeName = (fullName || emailLower.split('@')[0])
+            .toLowerCase().replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_').slice(0, 20);
+        const username = safeName + '_' + Date.now().toString(36);
         const tempPw   = Math.random().toString(36).slice(2) + Date.now();
         user = new User({
             username,
             email:    emailLower,
-            fullName: fullName || '',
+            fullName: fullName?.trim() || '',
             role:     'guest',
         });
         user = await User.register(user, tempPw);
