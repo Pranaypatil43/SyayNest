@@ -1,9 +1,18 @@
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 
-// Log at startup so Render logs show if env var is missing
-console.log('[mailer] RESEND_API_KEY:', process.env.RESEND_API_KEY ? '✅ set' : '⚠️  NOT SET');
+// Log at startup so Render logs show if env vars are missing
+console.log('[mailer] BREVO_USER:', process.env.BREVO_USER || '⚠️  NOT SET');
+console.log('[mailer] BREVO_PASS:', process.env.BREVO_PASS ? '✅ set' : '⚠️  NOT SET');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const transporter = nodemailer.createTransport({
+    host: 'smtp-relay.brevo.com',
+    port: 587,
+    secure: false,
+    auth: {
+        user: process.env.BREVO_USER,
+        pass: process.env.BREVO_PASS,
+    },
+});
 
 async function sendOtpEmail(to, otp, purpose = 'login') {
     const isNew  = purpose === 'signup';
@@ -137,19 +146,14 @@ async function sendOtpEmail(to, otp, purpose = 'login') {
 </body>
 </html>`;
 
-    const { error } = await resend.emails.send({
-        from: 'StayNest <onboarding@resend.dev>',  // free Resend sender (no domain needed)
+    await transporter.sendMail({
+        from: `"StayNest 🏡" <ba4a10001@smtp-brevo.com>`,
         to,
         subject,
         html,
     });
 
-    if (error) {
-        console.error('[Resend error]', error);
-        throw new Error(error.message);
-    }
-
-    console.log(`[OTP sent via Resend] to: ${to}`);
+    console.log(`[OTP sent via Brevo] to: ${to}`);
 }
 
 module.exports = { sendOtpEmail };
