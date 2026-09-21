@@ -42,10 +42,22 @@ const app = express();
 if (isProd) app.set('trust proxy', 1);
 
 // ── CORS ───────────────────────────────────────────────────
+// DEV: allow Vite dev server origins
+// PROD: CLIENT_URL must be set to the Vercel frontend URL
+//       e.g. https://staynest.vercel.app
+//       Multiple origins supported as comma-separated list:
+//       CLIENT_URL=https://staynest.vercel.app,https://www.staynest.com
 const DEV_ORIGINS = ['http://localhost:5173', 'http://localhost:5174'];
+
+const getAllowedOrigins = () => {
+  if (!isProd) return null; // handled below with function
+  if (!CLIENT_URL) return false; // same-origin only (single-server deploy)
+  return CLIENT_URL.split(',').map(u => u.trim()).filter(Boolean);
+};
+
 app.use(cors({
   origin: isProd
-    ? (CLIENT_URL ? [CLIENT_URL] : false)   // set CLIENT_URL env on AWS
+    ? getAllowedOrigins()
     : (origin, cb) => {
         if (!origin || DEV_ORIGINS.includes(origin)) return cb(null, true);
         cb(new Error(`CORS blocked: ${origin}`));
