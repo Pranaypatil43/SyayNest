@@ -1,21 +1,14 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-// Log at startup so Render logs show if env vars are missing
-console.log('[mailer] GMAIL_USER:', process.env.GMAIL_USER || '⚠️  NOT SET');
-console.log('[mailer] GMAIL_PASS:', process.env.GMAIL_PASS ? '✅ set' : '⚠️  NOT SET');
+// Log at startup so Render logs show if env var is missing
+console.log('[mailer] RESEND_API_KEY:', process.env.RESEND_API_KEY ? '✅ set' : '⚠️  NOT SET');
 
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_PASS,
-    },
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 async function sendOtpEmail(to, otp, purpose = 'login') {
-    const isNew    = purpose === 'signup';
-    const year     = new Date().getFullYear();
-    const expiry   = '10 minutes';
+    const isNew  = purpose === 'signup';
+    const year   = new Date().getFullYear();
+    const expiry = '10 minutes';
 
     const subject = isNew
         ? '🏡 Welcome to StayNest — Verify your email'
@@ -43,7 +36,6 @@ async function sendOtpEmail(to, otp, purpose = 'login') {
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <!-- Logo mark -->
                     <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:50%;width:52px;height:52px;line-height:52px;text-align:center;margin-bottom:14px;">
                       <span style="font-size:26px;">🏡</span>
                     </div>
@@ -60,7 +52,6 @@ async function sendOtpEmail(to, otp, purpose = 'login') {
           <!-- Body -->
           <tr>
             <td style="padding:40px 40px 32px;">
-
               <p style="margin:0 0 8px;color:#111;font-size:22px;font-weight:700;">
                 ${isNew ? 'Welcome to StayNest! 👋' : 'Hello again! 👋'}
               </p>
@@ -89,45 +80,32 @@ async function sendOtpEmail(to, otp, purpose = 'login') {
                 </tr>
               </table>
 
-              <!-- Steps hint -->
+              <!-- Steps -->
               <table width="100%" cellpadding="0" cellspacing="0"
                 style="background:#f9fafb;border-radius:10px;padding:20px;margin-bottom:28px;">
-                <tr>
-                  <td style="padding:0 0 12px;">
-                    <p style="margin:0;color:#333;font-size:13px;font-weight:700;">How to use it:</p>
-                  </td>
-                </tr>
-                <tr>
-                  <td>
-                    <p style="margin:0 0 6px;color:#555;font-size:13px;">
-                      1️⃣ &nbsp;Go back to the StayNest login page
-                    </p>
-                    <p style="margin:0 0 6px;color:#555;font-size:13px;">
-                      2️⃣ &nbsp;Enter the 6-digit code shown above
-                    </p>
-                    <p style="margin:0;color:#555;font-size:13px;">
-                      3️⃣ &nbsp;${isNew ? 'Your account will be activated!' : 'You\'ll be logged in instantly!'}
-                    </p>
-                  </td>
-                </tr>
+                <tr><td style="padding:0 0 12px;">
+                  <p style="margin:0;color:#333;font-size:13px;font-weight:700;">How to use it:</p>
+                </td></tr>
+                <tr><td>
+                  <p style="margin:0 0 6px;color:#555;font-size:13px;">1️⃣ &nbsp;Go back to the StayNest login page</p>
+                  <p style="margin:0 0 6px;color:#555;font-size:13px;">2️⃣ &nbsp;Enter the 6-digit code shown above</p>
+                  <p style="margin:0;color:#555;font-size:13px;">3️⃣ &nbsp;${isNew ? 'Your account will be activated!' : "You'll be logged in instantly!"}</p>
+                </td></tr>
               </table>
 
               <!-- Warning -->
               <table width="100%" cellpadding="0" cellspacing="0"
                 style="background:#fff3cd;border-left:4px solid #ffc107;border-radius:0 8px 8px 0;padding:14px 16px;margin-bottom:8px;">
-                <tr>
-                  <td>
-                    <p style="margin:0;color:#7a5c00;font-size:13px;line-height:1.6;">
-                      ⚠️ &nbsp;<strong>Never share this OTP</strong> with anyone.
-                      StayNest will never ask for your OTP over call or chat.
-                    </p>
-                  </td>
-                </tr>
+                <tr><td>
+                  <p style="margin:0;color:#7a5c00;font-size:13px;line-height:1.6;">
+                    ⚠️ &nbsp;<strong>Never share this OTP</strong> with anyone.
+                    StayNest will never ask for your OTP over call or chat.
+                  </p>
+                </td></tr>
               </table>
 
               <p style="margin:20px 0 0;color:#999;font-size:12px;line-height:1.7;">
                 If you didn't request this, you can safely ignore this email.
-                Your account will remain secure.
               </p>
             </td>
           </tr>
@@ -159,12 +137,19 @@ async function sendOtpEmail(to, otp, purpose = 'login') {
 </body>
 </html>`;
 
-    await transporter.sendMail({
-        from: `"StayNest 🏡" <${process.env.GMAIL_USER}>`,
+    const { error } = await resend.emails.send({
+        from: 'StayNest <onboarding@resend.dev>',  // free Resend sender (no domain needed)
         to,
         subject,
         html,
     });
+
+    if (error) {
+        console.error('[Resend error]', error);
+        throw new Error(error.message);
+    }
+
+    console.log(`[OTP sent via Resend] to: ${to}`);
 }
 
 module.exports = { sendOtpEmail };
