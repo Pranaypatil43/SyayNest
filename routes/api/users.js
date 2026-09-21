@@ -72,14 +72,11 @@ router.post('/send-otp', wrapAsync(async (req, res) => {
 
     // Send email
     try {
-        console.log(`[OTP] Attempting to send to: ${emailLower}`);
-        console.log(`[OTP] GMAIL_USER set: ${!!process.env.GMAIL_USER} (${process.env.GMAIL_USER || 'MISSING'})`);
-        console.log(`[OTP] GMAIL_PASS set: ${!!process.env.GMAIL_PASS} (length: ${process.env.GMAIL_PASS?.length || 0})`);
         await sendOtpEmail(emailLower, code, 'login');
-        console.log(`[OTP] Successfully sent to: ${emailLower}  Code: ${code}`);
+        console.log(`[OTP] Email: ${emailLower}  Code: ${code}`);
     } catch (err) {
-        console.error('[OTP email error] Full error:', err);
-        return res.status(500).json({ error: `Failed to send OTP email: ${err.message}` });
+        console.error('[OTP email error]', err.message, err.responseCode || '', err.response || '');
+        return res.status(500).json({ error: 'Failed to send OTP email. Please try again.' });
     }
 
     res.json({ message: `OTP sent to ${emailLower}` });

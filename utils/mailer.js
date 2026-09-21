@@ -1,5 +1,9 @@
 const nodemailer = require('nodemailer');
 
+// Log at startup so Render logs show if env vars are missing
+console.log('[mailer] GMAIL_USER:', process.env.GMAIL_USER || '⚠️  NOT SET');
+console.log('[mailer] GMAIL_PASS:', process.env.GMAIL_PASS ? '✅ set' : '⚠️  NOT SET');
+
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
