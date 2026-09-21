@@ -159,9 +159,12 @@ router.get('/auth/google/callback',
     passport.authenticate('google', { failureRedirect: '/login?error=google' }),
     (req, res) => {
         // Success — redirect to frontend listings page
-        const isProd    = process.env.NODE_ENV === 'production';
+        // CLIENT_URL may be comma-separated (multiple Vercel domains for CORS),
+        // so always take only the FIRST value as the redirect target.
+        const isProd = process.env.NODE_ENV === 'production';
+        const rawClientUrl = process.env.CLIENT_URL || '';
         const frontendUrl = isProd
-            ? (process.env.CLIENT_URL || '')
+            ? rawClientUrl.split(',')[0].trim()   // first URL only
             : 'http://localhost:5173';
         res.redirect(`${frontendUrl}/listings`);
     }
