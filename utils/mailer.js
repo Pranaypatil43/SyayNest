@@ -110,7 +110,7 @@ async function sendOtpEmail(to, otp, purpose = 'login') {
             'api-key':      process.env.BREVO_API_KEY,
         },
         body: JSON.stringify({
-            sender:      { name: 'StayNest', email: 'ba4a10001@smtp-brevo.com' },
+            sender:      { name: 'StayNest', email: 'pranaypatilpp43@gmail.com' },
             to:          [{ email: to }],
             subject,
             htmlContent: html,
