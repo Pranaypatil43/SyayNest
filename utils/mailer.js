@@ -1,12 +1,7 @@
-const Brevo = require('@getbrevo/brevo');
+// Uses Brevo HTTP API directly via fetch (no package needed)
+// Works on Render free tier — uses port 443, never blocked
 
-// Log at startup so Render logs show if env var is missing
 console.log('[mailer] BREVO_API_KEY:', process.env.BREVO_API_KEY ? '✅ set' : '⚠️  NOT SET');
-
-const client = Brevo.ApiClient.instance;
-client.authentications['api-key'].apiKey = process.env.BREVO_API_KEY;
-
-const transactionalApi = new Brevo.TransactionalEmailsApi();
 
 async function sendOtpEmail(to, otp, purpose = 'login') {
     const isNew  = purpose === 'signup';
@@ -38,7 +33,7 @@ async function sendOtpEmail(to, otp, purpose = 'login') {
               <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:50%;width:52px;height:52px;line-height:52px;text-align:center;margin-bottom:14px;">
                 <span style="font-size:26px;">🏡</span>
               </div>
-              <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:800;letter-spacing:-0.5px;">StayNest</h1>
+              <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:800;">StayNest</h1>
               <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:14px;">
                 ${isNew ? 'Welcome! One last step to get started.' : 'Your one-time login code is here.'}
               </p>
@@ -95,9 +90,7 @@ async function sendOtpEmail(to, otp, purpose = 'login') {
           <!-- Footer -->
           <tr>
             <td style="padding:24px 40px 32px;text-align:center;">
-              <p style="margin:0 0 6px;color:#bbb;font-size:12px;">
-                © ${year} StayNest &nbsp;·&nbsp; Find your perfect stay
-              </p>
+              <p style="margin:0 0 6px;color:#bbb;font-size:12px;">© ${year} StayNest &nbsp;·&nbsp; Find your perfect stay</p>
               <p style="margin:0;color:#ddd;font-size:11px;">This email was sent to ${to}</p>
             </td>
           </tr>
@@ -109,19 +102,28 @@ async function sendOtpEmail(to, otp, purpose = 'login') {
 </body>
 </html>`;
 
-    const sendSmtpEmail = new Brevo.SendSmtpEmail();
-    sendSmtpEmail.subject = subject;
-    sendSmtpEmail.htmlContent = html;
-    sendSmtpEmail.sender = { name: 'StayNest', email: 'pranaypatilpp43@gmail.com' };
-    sendSmtpEmail.to = [{ email: to }];
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+            'accept':       'application/json',
+            'content-type': 'application/json',
+            'api-key':      process.env.BREVO_API_KEY,
+        },
+        body: JSON.stringify({
+            sender:      { name: 'StayNest', email: 'pranaypatilpp43@gmail.com' },
+            to:          [{ email: to }],
+            subject,
+            htmlContent: html,
+        }),
+    });
 
-    try {
-        await transactionalApi.sendTransacEmail(sendSmtpEmail);
-        console.log(`[OTP sent via Brevo API] to: ${to}`);
-    } catch (err) {
-        console.error('[Brevo API error]', JSON.stringify(err?.response?.body || err.message));
-        throw new Error(err?.response?.body?.message || 'Failed to send email');
+    if (!response.ok) {
+        const err = await response.json();
+        console.error('[Brevo API error]', JSON.stringify(err));
+        throw new Error(err.message || 'Failed to send email');
     }
+
+    console.log(`[OTP sent via Brevo API] to: ${to}`);
 }
 
 module.exports = { sendOtpEmail };
