@@ -1,18 +1,12 @@
-const nodemailer = require('nodemailer');
+const Brevo = require('@getbrevo/brevo');
 
-// Log at startup so Render logs show if env vars are missing
-console.log('[mailer] BREVO_USER:', process.env.BREVO_USER || '⚠️  NOT SET');
-console.log('[mailer] BREVO_PASS:', process.env.BREVO_PASS ? '✅ set' : '⚠️  NOT SET');
+// Log at startup so Render logs show if env var is missing
+console.log('[mailer] BREVO_API_KEY:', process.env.BREVO_API_KEY ? '✅ set' : '⚠️  NOT SET');
 
-const transporter = nodemailer.createTransport({
-    host: 'smtp-relay.brevo.com',
-    port: 587,
-    secure: false,
-    auth: {
-        user: process.env.BREVO_USER,
-        pass: process.env.BREVO_PASS,
-    },
-});
+const client = Brevo.ApiClient.instance;
+client.authentications['api-key'].apiKey = process.env.BREVO_API_KEY;
+
+const transactionalApi = new Brevo.TransactionalEmailsApi();
 
 async function sendOtpEmail(to, otp, purpose = 'login') {
     const isNew  = purpose === 'signup';
@@ -32,7 +26,6 @@ async function sendOtpEmail(to, otp, purpose = 'login') {
   <title>${subject}</title>
 </head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
-
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;">
     <tr>
       <td align="center">
@@ -42,19 +35,13 @@ async function sendOtpEmail(to, otp, purpose = 'login') {
           <!-- Header -->
           <tr>
             <td style="background:linear-gradient(135deg,#ff385c 0%,#e0304e 100%);padding:36px 40px 32px;text-align:center;">
-              <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td align="center">
-                    <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:50%;width:52px;height:52px;line-height:52px;text-align:center;margin-bottom:14px;">
-                      <span style="font-size:26px;">🏡</span>
-                    </div>
-                    <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:800;letter-spacing:-0.5px;">StayNest</h1>
-                    <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:14px;font-weight:400;">
-                      ${isNew ? 'Welcome! One last step to get started.' : 'Your one-time login code is here.'}
-                    </p>
-                  </td>
-                </tr>
-              </table>
+              <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:50%;width:52px;height:52px;line-height:52px;text-align:center;margin-bottom:14px;">
+                <span style="font-size:26px;">🏡</span>
+              </div>
+              <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:800;letter-spacing:-0.5px;">StayNest</h1>
+              <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:14px;">
+                ${isNew ? 'Welcome! One last step to get started.' : 'Your one-time login code is here.'}
+              </p>
             </td>
           </tr>
 
@@ -74,8 +61,7 @@ async function sendOtpEmail(to, otp, purpose = 'login') {
               <!-- OTP Box -->
               <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
                 <tr>
-                  <td align="center"
-                    style="background:#fff8f9;border:2px dashed #ff385c;border-radius:12px;padding:28px 20px;">
+                  <td align="center" style="background:#fff8f9;border:2px dashed #ff385c;border-radius:12px;padding:28px 20px;">
                     <p style="margin:0 0 8px;color:#888;font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">
                       Your one-time password
                     </p>
@@ -87,19 +73,6 @@ async function sendOtpEmail(to, otp, purpose = 'login') {
                     </p>
                   </td>
                 </tr>
-              </table>
-
-              <!-- Steps -->
-              <table width="100%" cellpadding="0" cellspacing="0"
-                style="background:#f9fafb;border-radius:10px;padding:20px;margin-bottom:28px;">
-                <tr><td style="padding:0 0 12px;">
-                  <p style="margin:0;color:#333;font-size:13px;font-weight:700;">How to use it:</p>
-                </td></tr>
-                <tr><td>
-                  <p style="margin:0 0 6px;color:#555;font-size:13px;">1️⃣ &nbsp;Go back to the StayNest login page</p>
-                  <p style="margin:0 0 6px;color:#555;font-size:13px;">2️⃣ &nbsp;Enter the 6-digit code shown above</p>
-                  <p style="margin:0;color:#555;font-size:13px;">3️⃣ &nbsp;${isNew ? 'Your account will be activated!' : "You'll be logged in instantly!"}</p>
-                </td></tr>
               </table>
 
               <!-- Warning -->
@@ -119,22 +92,13 @@ async function sendOtpEmail(to, otp, purpose = 'login') {
             </td>
           </tr>
 
-          <!-- Divider -->
-          <tr>
-            <td style="padding:0 40px;">
-              <hr style="border:none;border-top:1px solid #f0f0f0;margin:0;" />
-            </td>
-          </tr>
-
           <!-- Footer -->
           <tr>
             <td style="padding:24px 40px 32px;text-align:center;">
               <p style="margin:0 0 6px;color:#bbb;font-size:12px;">
                 © ${year} StayNest &nbsp;·&nbsp; Find your perfect stay
               </p>
-              <p style="margin:0;color:#ddd;font-size:11px;">
-                This email was sent to ${to}
-              </p>
+              <p style="margin:0;color:#ddd;font-size:11px;">This email was sent to ${to}</p>
             </td>
           </tr>
 
@@ -142,18 +106,22 @@ async function sendOtpEmail(to, otp, purpose = 'login') {
       </td>
     </tr>
   </table>
-
 </body>
 </html>`;
 
-    await transporter.sendMail({
-        from: `"StayNest 🏡" <ba4a10001@smtp-brevo.com>`,
-        to,
-        subject,
-        html,
-    });
+    const sendSmtpEmail = new Brevo.SendSmtpEmail();
+    sendSmtpEmail.subject = subject;
+    sendSmtpEmail.htmlContent = html;
+    sendSmtpEmail.sender = { name: 'StayNest', email: 'pranaypatilpp43@gmail.com' };
+    sendSmtpEmail.to = [{ email: to }];
 
-    console.log(`[OTP sent via Brevo] to: ${to}`);
+    try {
+        await transactionalApi.sendTransacEmail(sendSmtpEmail);
+        console.log(`[OTP sent via Brevo API] to: ${to}`);
+    } catch (err) {
+        console.error('[Brevo API error]', JSON.stringify(err?.response?.body || err.message));
+        throw new Error(err?.response?.body?.message || 'Failed to send email');
+    }
 }
 
 module.exports = { sendOtpEmail };
